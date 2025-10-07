@@ -1,0 +1,11 @@
+services:
+  enrichment-api:
+    build: .
+    container_name: scientific-enrichment-api
+    ports:
+      - "8099:8099"
+    environment:
+      - MATERIALS_PROJECT_API_KEY=${MATERIALS_PROJECT_API_KEY}
+    restart: always
+    volumes:
+      - ./enrichment_api.py:/app/enrichment_api.py
