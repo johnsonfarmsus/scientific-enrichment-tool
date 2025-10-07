@@ -252,4 +252,4 @@ Contributions welcome! Please open an issue or pull request.
 
 ## Related Projects
 
-- [AB-MCTS Reasoning Engine](https://github.com/yourusername/openwebui-setup) - Advanced tree search reasoning for Open WebUI
+- [AB-MCTS Reasoning Engine](https://github.com/johnsonfarmsus/openwebui-ab-mcts-pipeline) - Advanced tree search reasoning for Open WebUI
