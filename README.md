@@ -1,6 +1,6 @@
 # Scientific Data Enrichment Tool for Open WebUI
 
-An Open WebUI tool that automatically enriches chemistry and materials science queries with contextual data from multiple scientific databases.
+An Open WebUI filter that automatically enriches chemistry and materials science queries with contextual data from multiple scientific databases. Works with any LLM available in Open WebUI, with per-chat toggle control.
 
 ## Features
 
@@ -68,21 +68,29 @@ python enrichment_api.py
 
 ## Open WebUI Integration
 
-### Installing the Function
+### Installing the Filter
 
-1. In Open WebUI, navigate to **Workspace** → **Functions**
-2. Click **+ Add Function**
-3. Upload the `scientific_enrichment_function.py` file
-4. Configure the valves:
-   - `ENRICHMENT_API_URL`: Set to `http://localhost:8099` (or your Docker service URL)
-   - `MATERIALS_PROJECT_API_KEY`: Your Materials Project API key (optional)
+1. In Open WebUI, navigate to **Settings** → **Filters**
+2. Click **+ Create New Filter**
+3. Copy the contents of `scientific_enrichment_function.py` and paste into the editor
+4. Click **Save**
+5. Configure the global valves (optional):
+   - `ENRICHMENT_API_URL`: Default is `http://scientific-enrichment-api:8099` (for Docker setup)
+   - `MATERIALS_PROJECT_API_KEY`: Your Materials Project API key (optional, but recommended)
 
 ### Using the Tool
 
+The enrichment filter works on a **per-chat basis**, giving you full control over when to use it:
+
 1. Start a new chat in Open WebUI
-2. Click the **tools icon** next to the message input
-3. Enable **Scientific Data Enrichment**
-4. Ask chemistry or materials science questions!
+2. Click the **chat settings** icon (usually in the sidebar or chat header)
+3. Find **"Scientific Data Enrichment"** in the filters list
+4. Toggle **"Enabled"** to ON for chemistry/materials questions
+5. Ask your questions - the filter automatically enriches queries with scientific data!
+
+**Default behavior:** OFF for all new chats. Enable only when you need chemistry/materials data.
+
+**Per-chat control:** Each chat has its own toggle, so you can enable enrichment in one chat for chemistry and leave it off in others for general use.
 
 **Example queries:**
 - "What happens if I mix ibuprofen with H2SO4?"
@@ -240,6 +248,7 @@ This enriched context helps the AI provide accurate, informed responses about ch
 
 - Python 3.11+
 - Docker (recommended)
+- Open WebUI v0.6.28+ (for filter support)
 - Materials Project API key (optional but recommended for best results)
 
 ## License

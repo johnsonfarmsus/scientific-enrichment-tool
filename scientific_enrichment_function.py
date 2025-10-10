@@ -14,12 +14,16 @@ from typing import Optional, Dict, Any, List, Callable, Awaitable
 from pydantic import BaseModel, Field
 
 
-class Tools:
-    """Scientific Data Enrichment Tool for Open WebUI"""
+class Filter:
+    """Scientific Data Enrichment Filter for Open WebUI"""
 
     class Valves(BaseModel):
+        priority: int = Field(
+            default=0,
+            description="Priority level for the filter operations."
+        )
         ENRICHMENT_API_URL: str = Field(
-            default="http://localhost:8099",
+            default="http://scientific-enrichment-api:8099",
             description="URL of the Scientific Enrichment API service"
         )
         MATERIALS_PROJECT_API_KEY: str = Field(
@@ -27,14 +31,55 @@ class Tools:
             description="Materials Project API key (optional, but recommended for best results)"
         )
 
+    class UserValves(BaseModel):
+        enabled: bool = Field(
+            default=False,
+            description="Enable scientific data enrichment for this chat"
+        )
+
     def __init__(self):
         self.valves = self.Valves()
 
-    async def enrich_query(
-        self,
-        query: str,
-        __event_emitter__: Callable[[dict], Awaitable[None]],
-    ) -> str:
+    async def inlet(self, body: dict, __user__: Optional[dict] = None) -> dict:
+        """
+        Inlet filter - enriches chemistry/materials queries before sending to LLM.
+        This is called automatically for every query when the filter is enabled.
+        """
+        # Check if user has enabled enrichment for this chat
+        if __user__ and __user__.get("valves"):
+            if not __user__["valves"].enabled:
+                return body
+        else:
+            # If no user valves set, don't enrich (default off)
+            return body
+
+        messages = body.get("messages", [])
+        if not messages:
+            return body
+
+        # Get the last user message
+        last_message = None
+        for msg in reversed(messages):
+            if msg.get("role") == "user":
+                last_message = msg
+                break
+
+        if not last_message:
+            return body
+
+        query = last_message.get("content", "")
+        if not query:
+            return body
+
+        # Enrich the query
+        enriched = await self._enrich_query(query)
+
+        # Update the last user message with enriched content
+        last_message["content"] = enriched
+
+        return body
+
+    async def _enrich_query(self, query: str) -> str:
         """
         Enriches chemistry and materials science queries with contextual data.
 
@@ -52,12 +97,6 @@ class Tools:
         :param query: The user's query to enrich
         :return: Enriched context string to prepend to the query
         """
-
-        await __event_emitter__({
-            "type": "status",
-            "data": {"description": "Searching scientific databases...", "done": False},
-        })
-
         enrichment_parts = []
 
         # Extract Materials Project ID
@@ -73,19 +112,14 @@ class Tools:
             # Materials Project lookups
             if mp_match:
                 mp_id = mp_match.group(1)
-                await self._lookup_materials_project(client, {"mp_id": mp_id}, enrichment_parts, __event_emitter__)
+                await self._lookup_materials_project(client, {"mp_id": mp_id}, enrichment_parts)
             elif formulas:
                 for formula in formulas[:3]:  # Limit to 3 formulas
-                    await self._lookup_materials_project(client, {"formula": formula}, enrichment_parts, __event_emitter__)
+                    await self._lookup_materials_project(client, {"formula": formula}, enrichment_parts)
 
             # Chemical name lookups (PubChem + ChEMBL + RDKit)
             for name in chemical_names[:3]:  # Limit to 3 names
-                await self._lookup_chemical(client, name, enrichment_parts, __event_emitter__)
-
-        await __event_emitter__({
-            "type": "status",
-            "data": {"description": "Scientific data enrichment complete", "done": True},
-        })
+                await self._lookup_chemical(client, name, enrichment_parts)
 
         if enrichment_parts:
             context = "**Scientific Context:**\n" + "\n".join(f"- {part}" for part in enrichment_parts)
@@ -141,16 +175,10 @@ class Tools:
         self,
         client: httpx.AsyncClient,
         payload: Dict[str, str],
-        enrichment_parts: List[str],
-        __event_emitter__: Callable[[dict], Awaitable[None]]
+        enrichment_parts: List[str]
     ):
         """Lookup materials from Materials Project"""
         try:
-            await __event_emitter__({
-                "type": "status",
-                "data": {"description": f"Querying Materials Project for {list(payload.values())[0]}...", "done": False},
-            })
-
             r = await client.post(f"{self.valves.ENRICHMENT_API_URL}/tools/materials/lookup", json=payload)
             if r.status_code == 200:
                 result = r.json()
@@ -190,16 +218,10 @@ class Tools:
         self,
         client: httpx.AsyncClient,
         name: str,
-        enrichment_parts: List[str],
-        __event_emitter__: Callable[[dict], Awaitable[None]]
+        enrichment_parts: List[str]
     ):
         """Lookup chemical from PubChem, ChEMBL, and calculate RDKit descriptors"""
         try:
-            await __event_emitter__({
-                "type": "status",
-                "data": {"description": f"Searching PubChem for {name}...", "done": False},
-            })
-
             # PubChem lookup
             r = await client.post(f"{self.valves.ENRICHMENT_API_URL}/tools/pubchem/lookup", json={"name": name})
             if r.status_code != 200:
@@ -227,11 +249,6 @@ class Tools:
             # RDKit calculations if SMILES available
             smiles = pubchem_data.get("smiles")
             if smiles:
-                await __event_emitter__({
-                    "type": "status",
-                    "data": {"description": f"Calculating molecular descriptors for {name}...", "done": False},
-                })
-
                 rdkit_r = await client.post(
                     f"{self.valves.ENRICHMENT_API_URL}/tools/chem/lipinski_pains",
                     json={"smiles": smiles}
@@ -250,11 +267,6 @@ class Tools:
                         enrichment_parts.append(" | ".join(rdkit_parts))
 
             # ChEMBL lookup for drug information
-            await __event_emitter__({
-                "type": "status",
-                "data": {"description": f"Searching ChEMBL for {name}...", "done": False},
-            })
-
             chembl_r = await client.post(f"{self.valves.ENRICHMENT_API_URL}/tools/chembl/lookup", json={"name": name})
             if chembl_r.status_code == 200:
                 chembl_data = chembl_r.json()
